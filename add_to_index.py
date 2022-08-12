@@ -2,6 +2,7 @@ from tqdm import tqdm
 import numpy as np
 import lmdb
 import faiss
+
 DB_features = lmdb.open("rgb_histograms.lmdb", readonly=True)
 dim = 512
 faiss_dim = dim
