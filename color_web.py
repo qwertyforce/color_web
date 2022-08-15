@@ -1,6 +1,7 @@
 import uvicorn
 if __name__ == '__main__':
     uvicorn.run('color_web:app', host='127.0.0.1', port=33335, log_level="info")
+    exit()
 
 from pydantic import BaseModel
 from typing import Optional, Union
@@ -14,20 +15,27 @@ import lmdb
 import io 
 from PIL import Image
 
-DB = lmdb.open('./rgb_histograms.lmdb',map_size=5000*1_000_000) #5000mb
+
 DATA_CHANGED_SINCE_LAST_SAVE = False
 INDEX = None
 app = FastAPI()
+
+def main():
+    global DB_rgb_hist
+    init_index()
+    DB_rgb_hist = lmdb.open('./rgb_histograms.lmdb',map_size=5000*1_000_000) #5000mb
+    loop = asyncio.get_event_loop()
+    loop.call_later(10, periodically_save_index,loop)
 
 def int_to_bytes(x: int) -> bytes:
     return x.to_bytes((x.bit_length() + 7) // 8, 'big')
 
 def delete_descriptor_by_id(id):
-    with DB.begin(write=True,buffers=True) as txn:
+    with DB_rgb_hist.begin(write=True,buffers=True) as txn:
         txn.delete(int_to_bytes(id))   #True = deleted False = not found
 
 def add_descriptor(id, rgb_hist):
-    with DB.begin(write=True, buffers=True) as txn:
+    with DB_rgb_hist.begin(write=True, buffers=True) as txn:
         txn.put(int_to_bytes(id), np.frombuffer(rgb_hist, dtype=np.float32))
 
 def read_img_file(image_buffer):
@@ -161,8 +169,4 @@ def init_index():
         print("Index is not found! Exiting...")
         exit()
 
-print(__name__)
-if __name__ == 'color_web':
-    init_index()
-    loop = asyncio.get_event_loop()
-    loop.call_later(10, periodically_save_index,loop)
+main()
