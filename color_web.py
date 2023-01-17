@@ -182,7 +182,7 @@ async def color_get_similar_images_by_image_buffer_handler(image: bytes = File(.
             for i in range(len(similar)):
                 similar[i]["file_name"] = file_names[i]
         return similar
-    except RuntimeError:
+    except:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Error in color_get_similar_images_by_image_buffer")
 
