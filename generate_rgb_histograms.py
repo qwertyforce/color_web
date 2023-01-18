@@ -2,10 +2,12 @@ import numpy as np
 from os import listdir
 from joblib import Parallel, delayed
 from tqdm import tqdm
-import lmdb
-import cv2
 from PIL import Image
 import argparse
+
+from modules.lmdb_ops import get_dbs
+from modules.byte_ops import int_from_bytes, int_to_bytes
+from modules.color_ops import get_color_features
 
 parser = argparse.ArgumentParser()
 parser.add_argument('image_path', type=str,nargs='?', default="./../test_images")
@@ -14,16 +16,8 @@ args = parser.parse_args()
 
 IMAGE_PATH = args.image_path
 USE_INT_FILENAMES = args.use_int_filenames_as_id
-
-def int_from_bytes(xbytes: bytes) -> int:
-    return int.from_bytes(xbytes, 'big')
-
-def int_to_bytes(x: int) -> bytes:
-    return x.to_bytes(4, 'big')
     
-DB_filename_to_id = lmdb.open('./filename_to_id.lmdb',map_size=50*1_000_000) #50mb
-DB_id_to_filename = lmdb.open('./id_to_filename.lmdb',map_size=50*1_000_000) #50mb
-DB = lmdb.open('./rgb_histograms.lmdb',map_size=5000*1_000_000) #500mb
+DB_rgb_hists, DB_filename_to_id, DB_id_to_filename = get_dbs()
 
 if USE_INT_FILENAMES == 0:
     with DB_id_to_filename.begin(buffers=True) as txn:
@@ -43,18 +37,11 @@ def check_if_exists_by_file_name(file_name):
             if not image_id:
                 return False
     
-    with DB.begin(buffers=True) as txn:
+    with DB_rgb_hists.begin(buffers=True) as txn:
         x = txn.get(image_id, default=False)
         if x:
             return True
         return False
-
-def get_features(query_image):
-    query_hist_combined = cv2.calcHist([query_image], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
-    query_hist_combined = query_hist_combined.flatten()
-    query_hist_combined = query_hist_combined*10000000
-    query_hist_combined = np.divide(query_hist_combined, query_image.shape[0]*query_image.shape[1], dtype=np.float32)
-    return query_hist_combined
 
 def read_img_file(f):
     img = Image.open(f)
@@ -66,7 +53,7 @@ def calc_hists(file_name):
     img_path = IMAGE_PATH+"/"+file_name
     try:
         query_image = np.array(read_img_file(img_path))
-        image_features = get_features(query_image)
+        image_features = get_color_features(query_image)
         return [file_name, image_features.tobytes()]
     except:
         print(f'error reading {img_path}')
@@ -111,6 +98,6 @@ for batch in new_images:
                 curs.putmulti(id_to_file_name)
 
     print("pushing data to db")
-    with DB.begin(write=True, buffers=True) as txn:
+    with DB_rgb_hists.begin(write=True, buffers=True) as txn:
         with txn.cursor() as curs:
             curs.putmulti(rgb_hists)

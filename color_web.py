@@ -22,22 +22,21 @@ import faiss
 import asyncio
 from os.path import exists
 import numpy as np
-import cv2
-import lmdb
 import io 
 from PIL import Image
 
+from modules.lmdb_ops import get_dbs
+from modules.byte_ops import int_to_bytes
+from modules.color_ops import get_color_features
 
 DATA_CHANGED_SINCE_LAST_SAVE = False
 INDEX = None
 app = FastAPI()
 
 def main():
-    global DB_rgb_hist, DB_filename_to_id, DB_id_to_filename
+    global DB_rgb_hists, DB_filename_to_id, DB_id_to_filename
     init_index()
-    DB_rgb_hist = lmdb.open('./rgb_histograms.lmdb',map_size=5000*1_000_000) #5000mb
-    DB_filename_to_id = lmdb.open('./filename_to_id.lmdb',map_size=50*1_000_000) #50mb
-    DB_id_to_filename = lmdb.open('./id_to_filename.lmdb',map_size=50*1_000_000) #50mb
+    DB_rgb_hists, DB_filename_to_id, DB_id_to_filename = get_dbs()
 
     loop = asyncio.get_event_loop()
     loop.call_later(10, periodically_save_index,loop)
@@ -46,7 +45,7 @@ def int_to_bytes(x: int) -> bytes:
     return x.to_bytes(4, 'big')
 
 def check_if_exists_by_image_id(image_id):
-    with DB_rgb_hist.begin(buffers=True) as txn:
+    with DB_rgb_hists.begin(buffers=True) as txn:
         x = txn.get(int_to_bytes(image_id), default=False)
         if x:
             return True
@@ -65,7 +64,7 @@ def get_filenames_bulk(image_ids):
 
 def delete_descriptor_by_id(image_id):
     image_id_bytes = int_to_bytes(image_id)
-    with DB_rgb_hist.begin(write=True, buffers=True) as txn:
+    with DB_rgb_hists.begin(write=True, buffers=True) as txn:
         txn.delete(image_id_bytes)   #True = deleted False = not found
 
     with DB_id_to_filename.begin(write=True, buffers=True) as txn:
@@ -78,7 +77,7 @@ def delete_descriptor_by_id(image_id):
 def add_descriptor(image_id, rgb_hist):
     file_name_bytes = f"{image_id}.online".encode()
     image_id_bytes = int_to_bytes(image_id)
-    with DB_rgb_hist.begin(write=True, buffers=True) as txn:
+    with DB_rgb_hists.begin(write=True, buffers=True) as txn:
         txn.put(image_id_bytes, np.frombuffer(rgb_hist, dtype=np.float32))
 
     with DB_id_to_filename.begin(write=True, buffers=True) as txn:
@@ -95,10 +94,7 @@ def read_img_file(image_buffer):
     
 def get_features(image_buffer):
     query_image = np.array(read_img_file(image_buffer))
-    query_hist_combined = cv2.calcHist([query_image], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
-    query_hist_combined = query_hist_combined.flatten()
-    query_hist_combined = query_hist_combined*10000000
-    query_hist_combined = np.divide(query_hist_combined, query_image.shape[0]*query_image.shape[1], dtype=np.float32)
+    query_hist_combined = get_color_features(query_image)
     return query_hist_combined
 
 def hist_similarity_search(target_features, k, distance_threshold):
