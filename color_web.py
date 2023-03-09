@@ -26,7 +26,7 @@ import io
 from PIL import Image
 
 from modules.lmdb_ops import get_dbs
-from modules.byte_ops import int_to_bytes
+from modules.byte_ops import int_to_bytes, int_from_bytes
 from modules.color_ops import get_color_features
 
 DATA_CHANGED_SINCE_LAST_SAVE = False
@@ -62,6 +62,13 @@ def get_filenames_bulk(image_ids):
 
     return file_names
 
+def get_image_id_by_filename(file_name):
+    with DB_filename_to_id.begin(buffers=True) as txn:
+        image_id = txn.get(file_name.encode(), default=False)
+        if not image_id:
+            return False
+        return int_from_bytes(image_id)
+    
 def delete_descriptor_by_id(image_id):
     image_id_bytes = int_to_bytes(image_id)
     with DB_rgb_hists.begin(write=True, buffers=True) as txn:
@@ -129,7 +136,8 @@ async def read_root():
     return {"Hello": "World"}
 
 class Item_delete_color_features(BaseModel):
-    image_id: int
+    image_id: Union[int ,None] = None
+    file_name: Union[None,str] = None
 
 class Item_color_get_similar_images_by_id(BaseModel):
     image_id: int
@@ -204,12 +212,16 @@ async def calculate_color_features_handler(image: bytes = File(...), image_id: s
 async def delete_color_features_handler(item: Item_delete_color_features):
     try:
         global DATA_CHANGED_SINCE_LAST_SAVE
-        res = INDEX.remove_ids(np.int64([item.image_id]))
+        if item.file_name:
+            image_id = get_image_id_by_filename(item.file_name)
+        else:
+            image_id = item.image_id
+        res = INDEX.remove_ids(np.int64([image_id]))
         if res != 0: 
-            delete_descriptor_by_id(item.image_id)
+            delete_descriptor_by_id(image_id)
             DATA_CHANGED_SINCE_LAST_SAVE = True
         else: #nothing to delete
-            print(f"err: no image with id {item.image_id}")    
+            print(f"err: no image with id {image_id}")    
         return Response(status_code=status.HTTP_200_OK)
     except:
         traceback.print_exc()
