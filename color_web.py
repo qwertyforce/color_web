@@ -231,15 +231,19 @@ def periodically_save_index(loop):
     global DATA_CHANGED_SINCE_LAST_SAVE, INDEX
     if DATA_CHANGED_SINCE_LAST_SAVE:
         DATA_CHANGED_SINCE_LAST_SAVE=False
-        faiss.write_index(INDEX, "./populated.index")
+        faiss.write_index(INDEX, "./data/populated.index")
     loop.call_later(10, periodically_save_index,loop)
 
 def init_index():
     global INDEX
-    if exists("./populated.index"):
-        INDEX = faiss.read_index("./populated.index")
+    if exists("./data/populated.index"):
+        INDEX = faiss.read_index("./data/populated.index")
     else:
         print("Index is not found! Exiting...")
-        exit()
+        print("Creating empty index")
+        import subprocess
+        subprocess.call(['python3', 'add_to_index.py'])
+        subprocess.call(['python', 'add_to_index.py']) #one should exist
+        init_index()
 
 main()

@@ -4,7 +4,7 @@ import lmdb
 import faiss
 from modules.byte_ops import int_from_bytes
 
-DB_features = lmdb.open("rgb_histograms.lmdb", readonly=True)
+DB_features = lmdb.open("./data/rgb_histograms.lmdb", readonly=True)
 dim = 512
 faiss_dim = dim
 quantizer = faiss.IndexFlat(faiss_dim, faiss.METRIC_L1)
@@ -28,4 +28,4 @@ def get_all_data_iterator(batch_size=10000):
 
 for ids, features in tqdm(get_all_data_iterator(100000)):
     index.add_with_ids(features,ids)
-faiss.write_index(index,"populated.index")
+faiss.write_index(index,"./data/populated.index")
