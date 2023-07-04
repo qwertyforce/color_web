@@ -6,8 +6,14 @@ Supported operations: add new image, delete image, find similar images by image 
 ```pip3 install -r requirements.txt```
 
 ```generate_rgb_histograms.py ./path_to_img_folder``` -> generates features  
+```--use_int_filenames_as_id=0``` - images get sequiential ids  
+```--use_int_filenames_as_id=1``` - image id is parsed from filename ("123.jpg" -> 123)  
+  
 ```add_to_index.py``` -> adds features from lmdb to Flat index  
+  
 ```color_web.py``` -> web microservice  
+```GET_FILENAMES=1 color_web.py``` -> when searching, include filename in search results  
+
 
 DOCKER:  
 build image - ```docker build -t qwertyforce/color_web:1.0.0 --network host -t qwertyforce/color_web:latest ./```  
